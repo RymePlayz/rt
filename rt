@@ -1,0 +1,201 @@
+#!/bin/bash
+
+case "$1" in
+  sshof)
+    echo "🔗 SSH Retrieval Mode"
+    read -p "GitHub username: " USER
+    echo "📜 Available repos (limit: 50):"
+    gh repo list "$USER" --limit 50 --json name --jq '.[] | "  • " + .name'
+    echo ""
+    read -p "Repo name to view SSH URL: " REPO
+    URL=$(gh repo view "$USER/$REPO" --json sshUrl --jq .sshUrl 2>/dev/null)
+    if [ -z "$URL" ]; then
+      echo "❌ Error: Could not retrieve SSH URL. Check the repo name and username."
+    else
+      echo "🧲 SSH URL: $URL"
+    fi
+    ;;
+
+  delrepo)
+    echo "🗑️ Repository Deletion Mode"
+    read -p "GitHub username: " USER
+    echo "📜 Available repos (listing limit: 50):"
+    gh repo list "$USER" --limit 50 --json name --jq '.[] | "  • " + .name'
+    echo ""
+    read -p "Repo name to delete: " REPO
+    echo ""
+    gh repo delete "$USER/$REPO"
+    if [ $? -eq 0 ]; then
+      echo "✅ Repository '$USER/$REPO' deleted."
+    else
+      echo "🚫 Deletion failed or was cancelled."
+    fi
+    ;;
+
+  listrepo)
+    echo "📜 List Repositories"
+    read -p "GitHub username: " USER
+    REPOS=$(gh repo list "$USER" --limit 50 --json name,sshUrl --jq '.[] | [.name, .sshUrl] | @tsv')
+    if [ -z "$REPOS" ]; then
+      echo "❌ No repositories found or error occurred."
+      exit 1
+    fi
+    IFS=$'\n' read -rd '' -a REPO_ARR <<<"$REPOS"
+    for i in "${!REPO_ARR[@]}"; do
+      NAME=$(echo "${REPO_ARR[$i]}" | cut -f1)
+      echo "$((i+1)). $NAME"
+    done
+    while true; do
+      read -p "Enter the number of the repo to show its SSH URL (or type 'exit' to quit): " CHOICE
+      if [[ "$CHOICE" == "exit" ]]; then
+        echo "Exiting."
+        break
+      elif [[ "$CHOICE" =~ ^[0-9]+$ ]] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -le "${#REPO_ARR[@]}" ]; then
+        SSH_URL=$(echo "${REPO_ARR[$((CHOICE-1))]}" | cut -f2)
+        echo "SSH URL: $SSH_URL"
+        break
+      else
+        echo "❌ Invalid selection. Try again."
+      fi
+    done
+    ;;
+
+  changeuser)
+    echo "🔄 Change Git User Info"
+    read -p "Enter new Git nickname: " NICK
+    read -p "Enter new Git email: " EMAIL
+    if [ -z "$NICK" ] || [ -z "$EMAIL" ]; then
+      echo "❌ Nickname and email cannot be empty."
+      exit 1
+    fi
+    git config --global user.name "$NICK"
+    git config --global user.email "$EMAIL"
+    echo "✅ Git user.name and user.email updated."
+    ;;
+newrepo)
+  echo "🆕 New Repo Mode: Create a local and remote GitHub repository."
+
+  GHUSER=$(gh api user --jq .login 2>/dev/null)
+  if [ -z "$GHUSER" ]; then
+    echo "❌ Error: GitHub user not detected. Use 'gh auth login' first."
+    exit 1
+  fi
+
+  echo "📛 Repo will be created under GitHub user: $GHUSER"
+  read -p "Enter new repository name: " REPO
+  if [ -z "$REPO" ]; then
+    echo "❌ Repository name cannot be empty."
+    exit 1
+  fi
+
+  read -p "Enter directory of new repo (leave blank for /home/$(whoami)): " BASEDIR
+  [ -z "$BASEDIR" ] && BASEDIR="/home/$(whoami)"
+  FINALDIR="$BASEDIR/$REPO"
+  echo "📂 Final repo directory will be: $FINALDIR"
+
+  read -p "Confirm directory? (Press Enter to confirm, or type anything to cancel): " CONFIRM
+  [ -n "$CONFIRM" ] && { echo "❌ Repo creation cancelled."; exit 1; }
+
+  if [ -d "$FINALDIR/.git" ]; then
+    echo "⚠️ Warning: '$FINALDIR' already contains a Git repository."
+  fi
+
+  mkdir -p "$FINALDIR" && cd "$FINALDIR" || { echo "❌ Failed to access directory."; exit 1; }
+  git init
+
+  read -p "Add README file? (y/n): " ADD_README
+  if [[ "$ADD_README" =~ ^[Yy]$ ]]; then
+    echo "# $REPO" > README.md
+    echo "Created with Royette's GitHub Toolkit (rt)" >> README.md
+    git add README.md
+  else
+    echo "📦 Skipping README creation."
+  fi
+
+  read -p "Add .gitignore file? (y/n): " ADD_IGNORE
+  if [[ "$ADD_IGNORE" =~ ^[Yy]$ ]]; then
+    echo "📄 Available templates: java, python, node, c++, go, rust, unity, android, dart"
+    read -p "Enter template name: " GITIGNORE
+    GITIGNORE=$(echo "$GITIGNORE" | sed 's/.*/\u&/')
+    curl -sL "https://raw.githubusercontent.com/github/gitignore/main/$GITIGNORE.gitignore" -o .gitignore
+    if [ -s .gitignore ]; then
+      echo "✅ .gitignore ($GITIGNORE) added."
+      git add .gitignore
+    else
+      echo "⚠️ Template '$GITIGNORE' not found. Skipping."
+      rm -f .gitignore
+    fi
+  else
+    echo "📦 Skipping .gitignore creation."
+  fi
+
+  if git diff --cached --quiet; then
+    echo "📦 No files staged. Skipping commit and push."
+    echo "📍 Repo initialized at: $FINALDIR"
+  else
+    git commit -m "Initial commit"
+    gh repo create "$GHUSER/$REPO" --source=. --public --push
+    if [ $? -eq 0 ]; then
+      echo "✅ Repository '$GHUSER/$REPO' created and pushed successfully."
+      echo "📍 Local repo directory: $FINALDIR"
+      read -p "Open repo in browser? (y/n): " OPENB
+      if [[ "$OPENB" =~ ^[Yy]$ ]]; then
+        xdg-open "https://github.com/$GHUSER/$REPO" >/dev/null 2>&1
+        echo "🌐 Opening: https://github.com/$GHUSER/$REPO"
+      else
+        echo "🌐 Browser launch skipped."
+      fi
+    else
+      echo "❌ Error: Failed to push repository."
+    fi
+  fi
+  ;;
+
+
+
+  clone)
+    echo "📥 Clone Repo via SSH"
+    read -p "GitHub username: " USER
+    echo "📜 Available repos (limit: 50):"
+    gh repo list "$USER" --limit 50 --json name,sshUrl --jq '.[] | [.name, .sshUrl] | @tsv' > /tmp/rt-repos.txt
+
+    IFS=$'\n' read -d '' -r -a REPOS < /tmp/rt-repos.txt
+    for i in "${!REPOS[@]}"; do
+      NAME=$(echo "${REPOS[$i]}" | cut -f1)
+      echo "$((i+1)). $NAME"
+    done
+
+    while true; do
+      read -p "Enter number to clone (or 'exit' to cancel): " CHOICE
+      if [[ "$CHOICE" == "exit" ]]; then
+        echo "❌ Clone cancelled."
+        break
+      elif [[ "$CHOICE" =~ ^[0-9]+$ ]] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -le "${#REPOS[@]}" ]; then
+        SSH_URL=$(echo "${REPOS[$((CHOICE-1))]}" | cut -f2)
+        git clone "$SSH_URL"
+        echo "✅ Cloned to ./$(basename "$SSH_URL" .git)"
+        break
+      else
+        echo "❌ Invalid selection. Try again."
+      fi
+    done
+    ;;
+
+  help | --help)
+    echo "🛠️ Royette's GitHub Toolkit (rt)"
+    echo ""
+    echo "Usage: rt <command>"
+    echo ""
+    echo "Commands:"
+    echo "  rt sshof       → Show SSH URL (asks for username/repo)"
+    echo "  rt delrepo     → Delete repo (confirmed via GitHub CLI)"
+    echo "  rt listrepo    → List repos and view SSH URL"
+    echo "  rt changeuser  → Set global Git user.name/email"
+    echo "  rt newrepo     → Create + push new repo (README/.gitignore optional)"
+    echo "  rt clone       → Clone a selected GitHub repo via SSH in beta stages"
+    echo "  rt help        → Show this command reference"
+    echo ""
+    echo "🔹 All commands are interactive and default to 'no' on optional actions."
+    echo "Version: 1.0.0"
+    ;;
+esac
