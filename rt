@@ -181,19 +181,50 @@ newrepo)
     done
     ;;
 
+genkey)
+  echo "🔑 SSH Key Generator"
+  read -p "Enter your Git email: " EMAIL
+  KEYFILE="$HOME/.ssh/id_ed25519"
+
+  if [ -f "$KEYFILE" ]; then
+    echo "⚠️ SSH key already exists at $KEYFILE"
+    read -p "Overwrite existing key? (y/n): " OVER
+    if [[ "$OVER" =~ ^[Nn]$ ]]; then
+      echo "❌ Key generation cancelled."
+      break
+    else
+      rm -f "$KEYFILE" "$KEYFILE.pub"
+    fi
+  fi
+
+  echo "🛠️ Generating SSH key..."
+  ssh-keygen -t ed25519 -C "$EMAIL" -f "$KEYFILE" -N ""
+
+  if [ $? -eq 0 ]; then
+    echo ""
+    echo "✅ SSH key generated successfully!"
+    echo "🔓 Public key:"
+    cat "$KEYFILE.pub"
+  else
+    echo "❌ SSH key generation failed."
+  fi
+  ;;
+
+
   help | --help)
     echo "🛠️ Royette's GitHub Toolkit (rt)"
     echo ""
     echo "Usage: rt <command>"
     echo ""
     echo "Commands:"
-    echo "  rt sshof       → Show SSH URL (asks for username/repo)"
-    echo "  rt delrepo     → Delete repo (confirmed via GitHub CLI)"
-    echo "  rt listrepo    → List repos and view SSH URL"
-    echo "  rt changeuser  → Set global Git user.name/email"
-    echo "  rt newrepo     → Create + push new repo (README/.gitignore optional)"
-    echo "  rt clone       → Clone a selected GitHub repo via SSH in beta stages"
-    echo "  rt help        → Show this command reference"
+    echo "  sshof       → Show SSH URL (asks for username/repo)"
+    echo "  delrepo     → Delete repo (confirmed via GitHub CLI)"
+    echo "  listrepo    → List repos and view SSH URL"
+    echo "  changeuser  → Set global Git user.name/email"
+    echo "  newrepo     → Create + push new repo (README/.gitignore optional)"
+    echo "  clone       → Clone a selected GitHub repo via SSH"
+    echo "  genkey      → Generate SSH key for auth"
+    echo "  help        → Show this command reference"
     echo ""
     echo "🔹 All commands are interactive and default to 'no' on optional actions."
     echo "Version: 1.0.0"
