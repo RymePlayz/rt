@@ -61,17 +61,39 @@ case "$1" in
     ;;
 
   changeuser)
-    echo "🔄 Change Git User Info"
+  echo "🔄 Change GitHub CLI Authentication and Git User Info"
+
+  # Logout from current GitHub CLI user
+  gh auth logout
+  echo "🚪 Logged out from GitHub CLI."
+
+  # Log in to new GitHub account
+  gh auth login --hostname github.com
+  if [ $? -ne 0 ]; then
+    echo "❌ GitHub CLI authentication failed."
+    exit 1
+  fi
+
+  NEWGHUSER=$(gh api user --jq .login)
+  echo "✅ GitHub CLI now authenticated as: $NEWGHUSER"
+
+  # Update Git global identity
+  while [ -z "$NICK" ]; do
     read -p "Enter new Git nickname: " NICK
+  done
+
+  while [ -z "$EMAIL" ]; do
     read -p "Enter new Git email: " EMAIL
-    if [ -z "$NICK" ] || [ -z "$EMAIL" ]; then
-      echo "❌ Nickname and email cannot be empty."
-      exit 1
-    fi
-    git config --global user.name "$NICK"
-    git config --global user.email "$EMAIL"
-    echo "✅ Git user.name and user.email updated."
-    ;;
+  done
+
+  git config --global user.name "$NICK"
+  git config --global user.email "$EMAIL"
+  echo "✅ Git user.name and user.email updated globally to:"
+  echo "👤 Name: $NICK"
+  echo "📧 Email: $EMAIL"
+  ;;
+
+
 newrepo)
   echo "🆕 New Repo Mode: Create a local and remote GitHub repository."
 
@@ -88,6 +110,10 @@ newrepo)
     exit 1
   fi
 
+  read -p "Make repository public or private? (public/private): " REPO_VIS
+  VIS_FLAG="--public"
+  [[ "$REPO_VIS" == "private" ]] && VIS_FLAG="--private"
+
   read -p "Enter directory of new repo (leave blank for /home/$(whoami)): " BASEDIR
   [ -z "$BASEDIR" ] && BASEDIR="/home/$(whoami)"
   FINALDIR="$BASEDIR/$REPO"
@@ -103,14 +129,13 @@ newrepo)
   mkdir -p "$FINALDIR" && cd "$FINALDIR" || { echo "❌ Failed to access directory."; exit 1; }
   git init
 
-  read -p "Add README file? (y/n): " ADD_README
-  if [[ "$ADD_README" =~ ^[Yy]$ ]]; then
-    echo "# $REPO" > README.md
-    echo "Created with Royette's GitHub Toolkit (rt)" >> README.md
-    git add README.md
-  else
-    echo "📦 Skipping README creation."
-  fi
+  # ✅ Force create README.md with custom banner + hyperlink
+  echo "# $REPO" > README.md
+  echo "![Banner](https://via.placeholder.com/728x90.png?text=$REPO+Project)" >> README.md
+  echo "" >> README.md
+  echo "Created with [Royette's GitHub Toolkit (rt)](https://github.com/RymePlayz)" >> README.md
+  git add README.md
+  echo "📝 README.md added with banner and link to GitHub profile."
 
   read -p "Add .gitignore file? (y/n): " ADD_IGNORE
   if [[ "$ADD_IGNORE" =~ ^[Yy]$ ]]; then
@@ -134,7 +159,7 @@ newrepo)
     echo "📍 Repo initialized at: $FINALDIR"
   else
     git commit -m "Initial commit"
-    gh repo create "$GHUSER/$REPO" --source=. --public --push
+    gh repo create "$GHUSER/$REPO" --source=. $VIS_FLAG --push
     if [ $? -eq 0 ]; then
       echo "✅ Repository '$GHUSER/$REPO' created and pushed successfully."
       echo "📍 Local repo directory: $FINALDIR"
@@ -150,6 +175,7 @@ newrepo)
     fi
   fi
   ;;
+
 
 
 
