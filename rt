@@ -19,7 +19,7 @@ case "$1" in
   delrepo)
     echo "🗑️ Repository Deletion Mode"
     read -p "GitHub username: " USER
-    echo "📜 Available repos (listing limit: 50):"
+    echo "📜 Available repos (limit: 50):"
     gh repo list "$USER" --limit 50 --json name --jq '.[] | "  • " + .name'
     echo ""
     read -p "Repo name to delete: " REPO
@@ -61,136 +61,110 @@ case "$1" in
     ;;
 
   changeuser)
-  echo "🔄 Change GitHub CLI Authentication and Git User Info"
-
-  # Logout from current GitHub CLI user
-  gh auth logout
-  echo "🚪 Logged out from GitHub CLI."
-
-  # Log in to new GitHub account
-  gh auth login --hostname github.com
-  if [ $? -ne 0 ]; then
-    echo "❌ GitHub CLI authentication failed."
-    exit 1
-  fi
-
-  NEWGHUSER=$(gh api user --jq .login)
-  echo "✅ GitHub CLI now authenticated as: $NEWGHUSER"
-
-  # Update Git global identity
-  while [ -z "$NICK" ]; do
-    read -p "Enter new Git nickname: " NICK
-  done
-
-  while [ -z "$EMAIL" ]; do
-    read -p "Enter new Git email: " EMAIL
-  done
-
-  git config --global user.name "$NICK"
-  git config --global user.email "$EMAIL"
-  echo "✅ Git user.name and user.email updated globally to:"
-  echo "👤 Name: $NICK"
-  echo "📧 Email: $EMAIL"
-  ;;
-
-
-newrepo)
-  echo "🆕 New Repo Mode: Create a local and remote GitHub repository."
-
-  GHUSER=$(gh api user --jq .login 2>/dev/null)
-  if [ -z "$GHUSER" ]; then
-    echo "❌ Error: GitHub user not detected. Use 'gh auth login' first."
-    exit 1
-  fi
-
-  echo "📛 Repo will be created under GitHub user: $GHUSER"
-  read -p "Enter new repository name: " REPO
-  if [ -z "$REPO" ]; then
-    echo "❌ Repository name cannot be empty."
-    exit 1
-  fi
-
-  read -p "Make repository public or private? (public/private): " REPO_VIS
-  VIS_FLAG="--public"
-  [[ "$REPO_VIS" == "private" ]] && VIS_FLAG="--private"
-
-  read -p "Enter directory of new repo (leave blank for /home/$(whoami)): " BASEDIR
-  [ -z "$BASEDIR" ] && BASEDIR="/home/$(whoami)"
-  FINALDIR="$BASEDIR/$REPO"
-  echo "📂 Final repo directory will be: $FINALDIR"
-
-  read -p "Confirm directory? (Press Enter to confirm, or type anything to cancel): " CONFIRM
-  [ -n "$CONFIRM" ] && { echo "❌ Repo creation cancelled."; exit 1; }
-
-  if [ -d "$FINALDIR/.git" ]; then
-    echo "⚠️ Warning: '$FINALDIR' already contains a Git repository."
-  fi
-
-  mkdir -p "$FINALDIR" && cd "$FINALDIR" || { echo "❌ Failed to access directory."; exit 1; }
-  git init
-
-  # ✅ Force create README.md with custom banner + hyperlink
-  echo "# $REPO" > README.md
-  echo "![Banner](https://via.placeholder.com/728x90.png?text=$REPO+Project)" >> README.md
-  echo "" >> README.md
-  echo "Created with [Royette's GitHub Toolkit (rt)](https://github.com/RymePlayz)" >> README.md
-  git add README.md
-  echo "📝 README.md added with banner and link to GitHub profile."
-
-  read -p "Add .gitignore file? (y/n): " ADD_IGNORE
-  if [[ "$ADD_IGNORE" =~ ^[Yy]$ ]]; then
-    echo "📄 Available templates: java, python, node, c++, go, rust, unity, android, dart"
-    read -p "Enter template name: " GITIGNORE
-    GITIGNORE=$(echo "$GITIGNORE" | sed 's/.*/\u&/')
-    curl -sL "https://raw.githubusercontent.com/github/gitignore/main/$GITIGNORE.gitignore" -o .gitignore
-    if [ -s .gitignore ]; then
-      echo "✅ .gitignore ($GITIGNORE) added."
-      git add .gitignore
-    else
-      echo "⚠️ Template '$GITIGNORE' not found. Skipping."
-      rm -f .gitignore
+    echo "🔄 Change GitHub CLI Authentication and Git User Info"
+    gh auth logout
+    echo "🚪 Logged out from GitHub CLI."
+    gh auth login --hostname github.com
+    if [ $? -ne 0 ]; then
+      echo "❌ GitHub CLI authentication failed."
+      exit 1
     fi
-  else
-    echo "📦 Skipping .gitignore creation."
-  fi
+    NEWGHUSER=$(gh api user --jq .login)
+    echo "✅ GitHub CLI now authenticated as: $NEWGHUSER"
+    while [ -z "$NICK" ]; do
+      read -p "Enter new Git nickname: " NICK
+    done
+    while [ -z "$EMAIL" ]; do
+      read -p "Enter new Git email: " EMAIL
+    done
+    git config --global user.name "$NICK"
+    git config --global user.email "$EMAIL"
+    echo "✅ Git user.name and user.email updated globally to:"
+    echo "👤 Name: $NICK"
+    echo "📧 Email: $EMAIL"
+    ;;
 
-  if git diff --cached --quiet; then
-    echo "📦 No files staged. Skipping commit and push."
-    echo "📍 Repo initialized at: $FINALDIR"
-  else
-    git commit -m "Initial commit"
-    gh repo create "$GHUSER/$REPO" --source=. $VIS_FLAG --push
-    if [ $? -eq 0 ]; then
-      echo "✅ Repository '$GHUSER/$REPO' created and pushed successfully."
-      echo "📍 Local repo directory: $FINALDIR"
-      read -p "Open repo in browser? (y/n): " OPENB
-      if [[ "$OPENB" =~ ^[Yy]$ ]]; then
-        xdg-open "https://github.com/$GHUSER/$REPO" >/dev/null 2>&1
-        echo "🌐 Opening: https://github.com/$GHUSER/$REPO"
+  newrepo)
+    echo "🆕 New Repo Mode: Create a local and remote GitHub repository."
+    GHUSER=$(gh api user --jq .login 2>/dev/null)
+    if [ -z "$GHUSER" ]; then
+      echo "❌ Error: GitHub user not detected. Use 'gh auth login' first."
+      exit 1
+    fi
+    echo "📛 Repo will be created under GitHub user: $GHUSER"
+    read -p "Enter new repository name: " REPO
+    if [ -z "$REPO" ]; then
+      echo "❌ Repository name cannot be empty."
+      exit 1
+    fi
+    read -p "Make repository public or private? (public/private): " REPO_VIS
+    VIS_FLAG="--public"
+    [[ "$REPO_VIS" == "private" ]] && VIS_FLAG="--private"
+    read -p "Enter directory of new repo (leave blank for /home/$(whoami)): " BASEDIR
+    [ -z "$BASEDIR" ] && BASEDIR="/home/$(whoami)"
+    FINALDIR="$BASEDIR/$REPO"
+    echo "📂 Final repo directory will be: $FINALDIR"
+    read -p "Confirm directory? (Press Enter to confirm, or type anything to cancel): " CONFIRM
+    [ -n "$CONFIRM" ] && { echo "❌ Repo creation cancelled."; exit 1; }
+    if [ -d "$FINALDIR/.git" ]; then
+      echo "⚠️ Warning: '$FINALDIR' already contains a Git repository."
+    fi
+    mkdir -p "$FINALDIR" && cd "$FINALDIR" || { echo "❌ Failed to access directory."; exit 1; }
+    git init
+    echo "# $REPO" > README.md
+    echo "![Banner](https://via.placeholder.com/728x90.png?text=$REPO+Project)" >> README.md
+    echo "" >> README.md
+    echo "Created with [Royette's GitHub Toolkit (rt)](https://github.com/RymePlayz)" >> README.md
+    git add README.md
+    echo "📝 README.md added with banner and link to GitHub profile."
+    read -p "Add .gitignore file? (y/n): " ADD_IGNORE
+    if [[ "$ADD_IGNORE" =~ ^[Yy]$ ]]; then
+      echo "📄 Available templates: java, python, node, c++, go, rust, unity, android, dart"
+      read -p "Enter template name: " GITIGNORE
+      GITIGNORE=$(echo "$GITIGNORE" | sed 's/.*/\u&/')
+      curl -sL "https://raw.githubusercontent.com/github/gitignore/main/$GITIGNORE.gitignore" -o .gitignore
+      if [ -s .gitignore ]; then
+        echo "✅ .gitignore ($GITIGNORE) added."
+        git add .gitignore
       else
-        echo "🌐 Browser launch skipped."
+        echo "⚠️ Template '$GITIGNORE' not found. Skipping."
+        rm -f .gitignore
       fi
     else
-      echo "❌ Error: Failed to push repository."
+      echo "📦 Skipping .gitignore creation."
     fi
-  fi
-  ;;
-
-
-
+    if git diff --cached --quiet; then
+      echo "📦 No files staged. Skipping commit and push."
+      echo "📍 Repo initialized at: $FINALDIR"
+    else
+      git commit -m "Initial commit"
+      gh repo create "$GHUSER/$REPO" --source=. $VIS_FLAG --push
+      if [ $? -eq 0 ]; then
+        echo "✅ Repository '$GHUSER/$REPO' created and pushed successfully."
+        echo "📍 Local repo directory: $FINALDIR"
+        read -p "Open repo in browser? (y/n): " OPENB
+        if [[ "$OPENB" =~ ^[Yy]$ ]]; then
+          xdg-open "https://github.com/$GHUSER/$REPO" >/dev/null 2>&1
+          echo "🌐 Opening: https://github.com/$GHUSER/$REPO"
+        else
+          echo "🌐 Browser launch skipped."
+        fi
+      else
+        echo "❌ Error: Failed to push repository."
+      fi
+    fi
+    ;;
 
   clone)
     echo "📥 Clone Repo via SSH"
     read -p "GitHub username: " USER
     echo "📜 Available repos (limit: 50):"
     gh repo list "$USER" --limit 50 --json name,sshUrl --jq '.[] | [.name, .sshUrl] | @tsv' > /tmp/rt-repos.txt
-
     IFS=$'\n' read -d '' -r -a REPOS < /tmp/rt-repos.txt
     for i in "${!REPOS[@]}"; do
       NAME=$(echo "${REPOS[$i]}" | cut -f1)
       echo "$((i+1)). $NAME"
     done
-
     while true; do
       read -p "Enter number to clone (or 'exit' to cancel): " CHOICE
       if [[ "$CHOICE" == "exit" ]]; then
@@ -207,37 +181,33 @@ newrepo)
     done
     ;;
 
-genkey)
-  echo "🔑 SSH Key Generator"
-  read -p "Enter your Git email: " EMAIL
-  KEYFILE="$HOME/.ssh/id_ed25519"
-
-  if [ -f "$KEYFILE" ]; then
-    echo "⚠️ SSH key already exists at $KEYFILE"
-    read -p "Overwrite existing key? (y/n): " OVER
-    if [[ "$OVER" =~ ^[Nn]$ ]]; then
-      echo "❌ Key generation cancelled."
-      break
-    else
-      rm -f "$KEYFILE" "$KEYFILE.pub"
+  genkey)
+    echo "🔑 SSH Key Generator"
+    read -p "Enter your Git email: " EMAIL
+    KEYFILE="$HOME/.ssh/id_ed25519"
+    if [ -f "$KEYFILE" ]; then
+      echo "⚠️ SSH key already exists at $KEYFILE"
+      read -p "Overwrite existing key? (y/n): " OVER
+      if [[ "$OVER" =~ ^[Nn]$ ]]; then
+        echo "❌ Key generation cancelled."
+        break
+      else
+        rm -f "$KEYFILE" "$KEYFILE.pub"
+      fi
     fi
-  fi
+    echo "🛠️ Generating SSH key..."
+    ssh-keygen -t ed25519 -C "$EMAIL" -f "$KEYFILE" -N ""
+    if [ $? -eq 0 ]; then
+      echo ""
+      echo "✅ SSH key generated successfully!"
+      echo "🔓 Public key:"
+      cat "$KEYFILE.pub"
+    else
+      echo "❌ SSH key generation failed."
+    fi
+    ;;
 
-  echo "🛠️ Generating SSH key..."
-  ssh-keygen -t ed25519 -C "$EMAIL" -f "$KEYFILE" -N ""
-
-  if [ $? -eq 0 ]; then
-    echo ""
-    echo "✅ SSH key generated successfully!"
-    echo "🔓 Public key:"
-    cat "$KEYFILE.pub"
-  else
-    echo "❌ SSH key generation failed."
-  fi
-  ;;
-
-
-  help | --help)
+  help|--help)
     echo "🛠️ Royette's GitHub Toolkit (rt)"
     echo ""
     echo "Usage: rt <command>"
@@ -253,6 +223,5 @@ genkey)
     echo "  help        → Show this command reference"
     echo ""
     echo "🔹 All commands are interactive and default to 'no' on optional actions."
-    echo "Version: 1.0.0"
-    ;;
+    echo
 esac
